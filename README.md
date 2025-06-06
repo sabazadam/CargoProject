@@ -37,7 +37,7 @@ To run this application locally, follow these steps:
 
 1.  **Clone the repository:**
     ```bash
-    git clone [<your-repository-url>](https://github.com/sabazadam/CargoProject)
+    git clone https://github.com/sabazadam/CargoProject
     cd CargoProject # or your project's root directory
     ```
 
