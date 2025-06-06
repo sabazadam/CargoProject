@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Cargo Planner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .indicator-red { color: #ef4444; /* red-500 */ }
+        .indicator-orange { color: #f97316; /* orange-500 */ }
+        .indicator-green { color: #22c55e; /* green-500 */ }
+        .truck-card, .box-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .truck-card:hover, .box-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+        }
+        .truck-card.selected {
+            border-color: #4f46e5; /* indigo-600 */
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.4);
+        }
+        .quantity-input {
+            width: 80px; /* Wider input field */
+            text-align: center;
+            border: 1px solid #d1d5db; /* gray-300 */
+            border-radius: 0.375rem; /* rounded-md */
+            padding: 0.5rem;
+        }
+        /* Hide number input spinners on Chrome, Safari, Edge */
+        .quantity-input::-webkit-outer-spin-button,
+        .quantity-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* Hide number input spinners on Firefox */
+        .quantity-input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        /* 3D Modal Styles */
+        .modal-overlay {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-container {
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        }
+        .modal-hidden { /* Combined hidden state for overlay and container */
+            opacity: 0;
+            pointer-events: none; /* Make it non-interactive when hidden */
+        }
+        .modal-hidden .modal-overlay { /* Ensure overlay also fades out */
+            opacity: 0;
+        }
+        .modal-hidden .modal-container {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        #sceneContainer canvas {
+            display: block; /* Prevents extra space below canvas */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 min-h-screen p-4 md:p-6">
+
+    <div class="container mx-auto max-w-7xl bg-white p-6 sm:p-8 rounded-xl shadow-2xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold text-indigo-600">Interactive Cargo Planner</h1>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+            <!-- Left & Center Column: Trucks and Boxes -->
+            <div class="lg:col-span-2 space-y-8">
+                <!-- Truck Selection -->
+                <div>
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4 border-b pb-2">Select Truck</h2>
+                    <div id="truckSelectionArea" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <!-- Truck cards will be injected here -->
+                    </div>
+                </div>
+
+                <!-- Box Configuration -->
+                <div>
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4 border-b pb-2">Configure Box Quantities</h2>
+                    <div id="boxConfigurationArea" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <!-- Box cards will be injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Actions & Status -->
+            <div class="space-y-6">
+                <div class="p-5 bg-gray-50 rounded-lg shadow sticky top-6">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">Actions</h2>
+                    <button id="findBestFitBtn" class="w-full mb-3 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fas fa-magic mr-2"></i>Volumetric Fit
+                    </button>
+                    <button id="resetSelectionsBtn" class="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50">
+                        <i class="fas fa-undo mr-2"></i>Reset Selections
+                    </button>
+                    <button id="view3DLoadBtn" class="w-full mt-3 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50">
+                        <i class="fas fa-cube mr-2"></i>Calculate & View 3D Load
+                    </button>
+                    <p id="actionMessage" class="text-xs text-center mt-3 h-4 text-red-500"></p>
+
+                    <div class="mt-6">
+                        <h2 class="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">Truck Status</h2>
+                        <div id="truckStatusInfo" class="text-sm space-y-2 text-gray-600">
+                            <p>Selected Truck: <span id="selectedTruckName" class="font-medium text-gray-900">-</span></p>
+                            <p>Total Truck Volume: <span id="truckTotalVolume" class="font-medium text-gray-900">-</span></p>
+                            <div class="w-full bg-gray-200 rounded-full h-6 mb-1 shadow-inner overflow-hidden">
+                                <div id="truckLoadProgress" class="bg-green-500 h-6 text-xs font-medium text-blue-100 text-center p-1 leading-none rounded-full transition-all duration-300 ease-out" style="width: 0%;">
+                                    0%
+                                </div>
+                            </div>
+                            <p>Loaded Volume: <span id="truckLoadedVolume" class="font-medium text-gray-900">-</span></p>
+                            <p>Remaining Volume: <span id="truckRemainingVolume" class="font-medium text-gray-900">-</span></p>
+                            <p id="truckStatusMessage" class="font-semibold h-5"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3D Modal -->
+    <div id="modal3D" class="fixed inset-0 z-50 overflow-y-auto modal-hidden flex items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black modal-overlay"></div>
+        <div class="modal-container bg-white w-11/12 md:max-w-2xl lg:max-w-4xl mx-auto rounded-lg shadow-xl z-50 overflow-y-auto">
+            <div class="p-4 md:p-6">
+                <div class="flex justify-between items-center border-b pb-3 mb-4">
+                    <p class="text-2xl font-semibold text-gray-700">3D Load Preview</p>
+                    <button id="closeModal3DBtn" class="text-gray-400 hover:text-gray-600 transition">
+                        <i class="fas fa-times fa-2x"></i>
+                    </button>
+                </div>
+                <div id="sceneContainer" class="w-full h-[400px] md:h-[500px] lg:h-[600px] bg-gray-200 rounded relative overflow-hidden">
+                    <p id="loading3DMessage" class="absolute inset-0 flex items-center justify-center text-gray-500">Loading 3D Scene...</p>
+                </div>
+                 <p class="text-xs text-gray-500 mt-2 text-center">Use mouse to orbit, scroll to zoom, right-click to pan.</p>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Data Structures ---
+        const BOX_TYPES_DATA = {
+            "small": { name: "Small Box", length: 10, width: 10, height: 10, volume: 1000, icon: "fa-box-archive", color: 0xff0000 },
+            "medium": { name: "Medium Box", length: 20, width: 20, height: 20, volume: 8000, icon: "fa-box-open", color: 0x00ff00 },
+            "large": { name: "Large Box", length: 30, width: 30, height: 30, volume: 27000, icon: "fa-boxes-stacked", color: 0x0000ff },
+            "flat": { name: "Flat Box", length: 40, width: 30, height: 5, volume: 6000, icon: "fa-box", color: 0xffff00 },
+            "long": { name: "Long Box", length: 50, width: 10, height: 10, volume: 5000, icon: "fa-box-tissue", color: 0xff00ff }
+        };
+
+        const TRUCK_TYPES_DATA = {
+            "pickup": { name: "Pickup Truck", length: 100, width: 50, height: 50, volume: 250000, icon: "fa-truck-pickup" },
+            "van": { name: "Cargo Van", length: 200, width: 100, height: 100, volume: 2000000, icon: "fa-truck-moving" },
+            "semi": { name: "Semi Trailer", length: 500, width: 150, height: 150, volume: 11250000, icon: "fa-truck" }
+        };
+
+        let INVENTORY_DATA = {
+            "small": 100, "medium": 50, "large": 20, "flat": 30, "long": 40
+        };
+
+        // --- State Variables ---
+        let selectedTruckKey = null;
+        let selectedBoxCounts = {};
+
+        // --- DOM Elements ---
+        const truckSelectionArea = document.getElementById('truckSelectionArea');
+        const boxConfigurationArea = document.getElementById('boxConfigurationArea');
+        const findBestFitBtn = document.getElementById('findBestFitBtn');
+        const resetSelectionsBtn = document.getElementById('resetSelectionsBtn');
+        const actionMessageEl = document.getElementById('actionMessage');
+
+        const selectedTruckNameEl = document.getElementById('selectedTruckName');
+        const truckTotalVolumeEl = document.getElementById('truckTotalVolume');
+        const truckLoadProgressEl = document.getElementById('truckLoadProgress');
+        const truckLoadedVolumeEl = document.getElementById('truckLoadedVolume');
+        const truckRemainingVolumeEl = document.getElementById('truckRemainingVolume');
+        const truckStatusMessageEl = document.getElementById('truckStatusMessage');
+
+        const view3DLoadBtn = document.getElementById('view3DLoadBtn');
+        const modal3D = document.getElementById('modal3D');
+        const closeModal3DBtn = document.getElementById('closeModal3DBtn');
+        const sceneContainer = document.getElementById('sceneContainer');
+        const loading3DMessageEl = document.getElementById('loading3DMessage');
+
+        // --- Initialization ---
+        function initializeApp() {
+            renderTrucks();
+            renderBoxes();
+            resetSelectedBoxCounts();
+            updateTruckStatusUI();
+
+            findBestFitBtn.addEventListener('click', handleFindBestFit);
+            resetSelectionsBtn.addEventListener('click', handleResetSelections);
+
+            if (view3DLoadBtn) {
+                view3DLoadBtn.addEventListener('click', handleView3DLoad);
+            }
+            if (closeModal3DBtn && modal3D) {
+                closeModal3DBtn.addEventListener('click', () => {
+                    modal3D.classList.add('modal-hidden');
+                    cleanup3DScene();
+                });
+            }
+            updateActionButtonsState();
+        }
+
+        // --- Rendering Functions ---
+        function renderTrucks() {
+            truckSelectionArea.innerHTML = '';
+            Object.keys(TRUCK_TYPES_DATA).forEach(key => {
+                const truck = TRUCK_TYPES_DATA[key];
+                const card = document.createElement('div');
+                card.className = `truck-card p-4 bg-white border-2 border-gray-200 rounded-lg shadow-md cursor-pointer flex flex-col items-center justify-center text-center ${selectedTruckKey === key ? 'selected' : ''}`;
+                card.dataset.truckKey = key;
+                card.innerHTML = `
+                    <i class="fas ${truck.icon} fa-3x mb-2 text-indigo-500"></i>
+                    <h3 class="font-semibold text-lg">${truck.name}</h3>
+                    <p class="text-xs text-gray-500">Vol: ${truck.volume.toLocaleString()}</p>
+                `;
+                card.addEventListener('click', () => handleTruckSelection(key));
+                truckSelectionArea.appendChild(card);
+            });
+        }
+
+        function renderBoxes() {
+            boxConfigurationArea.innerHTML = '';
+            Object.keys(BOX_TYPES_DATA).forEach(key => {
+                const box = BOX_TYPES_DATA[key];
+                const card = document.createElement('div');
+                card.className = 'box-card p-4 bg-white border border-gray-200 rounded-lg shadow flex flex-col items-center text-center';
+                card.innerHTML = `
+                    <i class="fas ${box.icon} fa-2x mb-2 text-green-500"></i>
+                    <h4 class="font-semibold">${box.name}</h4>
+                    <p class="text-xs text-gray-500">Vol: ${box.volume.toLocaleString()}</p>
+                    <p class="text-xs text-gray-500">Stock: <span id="stock-${key}">${INVENTORY_DATA[key]}</span></p>
+                    <div class="flex items-center justify-center mt-3">
+                        <input type="number" id="count-${key}" value="${selectedBoxCounts[key] || 0}" min="0" data-box-key="${key}" class="quantity-input" />
+                    </div>
+                `;
+                boxConfigurationArea.appendChild(card);
+            });
+
+            // Add a single event listener for all box inputs
+            boxConfigurationArea.addEventListener('input', handleBoxQuantityChange);
+        }
+
+        // --- UI Update Functions ---
+        function updateTruckStatusUI() {
+            if (selectedTruckKey) {
+                const truck = TRUCK_TYPES_DATA[selectedTruckKey];
+                selectedTruckNameEl.textContent = truck.name;
+                truckTotalVolumeEl.textContent = truck.volume.toLocaleString();
+
+                let currentLoadedVolume = 0;
+                Object.keys(selectedBoxCounts).forEach(boxKey => {
+                    currentLoadedVolume += (selectedBoxCounts[boxKey] || 0) * BOX_TYPES_DATA[boxKey].volume;
+                });
+
+                const remainingVolume = truck.volume - currentLoadedVolume;
+                truckLoadedVolumeEl.textContent = currentLoadedVolume.toLocaleString();
+                truckRemainingVolumeEl.textContent = remainingVolume.toLocaleString();
+
+                const loadPercentage = truck.volume > 0 ? (currentLoadedVolume / truck.volume) * 100 : 0;
+                truckLoadProgressEl.style.width = `${Math.min(100, loadPercentage).toFixed(1)}%`;
+                truckLoadProgressEl.textContent = `${Math.min(100, loadPercentage).toFixed(1)}% Full`;
+            } else {
+                selectedTruckNameEl.textContent = "-";
+                truckTotalVolumeEl.textContent = "-";
+                truckLoadedVolumeEl.textContent = "-";
+                truckRemainingVolumeEl.textContent = "-";
+                truckLoadProgressEl.style.width = "0%";
+                truckLoadProgressEl.textContent = "0%";
+                truckStatusMessageEl.textContent = "Select a truck.";
+            }
+            updateActionButtonsState();
+        }
+
+        function updateBoxCountDisplay(boxKey) {
+            const countInput = document.getElementById(`count-${boxKey}`);
+            if (countInput) {
+                countInput.value = selectedBoxCounts[boxKey] || 0;
+            }
+        }
+
+        function updateAllBoxCountDisplays() {
+            Object.keys(BOX_TYPES_DATA).forEach(key => {
+                updateBoxCountDisplay(key);
+            });
+        }
+
+        function updateActionButtonsState() {
+            findBestFitBtn.disabled = !selectedTruckKey;
+            if (view3DLoadBtn) view3DLoadBtn.disabled = !selectedTruckKey;
+        }
+
+        // --- Event Handlers & Logic ---
+        function handleTruckSelection(key) {
+            selectedTruckKey = key;
+            const truckCards = truckSelectionArea.querySelectorAll('.truck-card');
+            truckCards.forEach(card => {
+                card.classList.toggle('selected', card.dataset.truckKey === key);
+            });
+            updateTruckStatusUI();
+        }
+
+        function resetSelectedBoxCounts() {
+             Object.keys(BOX_TYPES_DATA).forEach(key => {
+                selectedBoxCounts[key] = 0;
+            });
+        }
+
+        function handleBoxQuantityChange(event) {
+            const input = event.target;
+            const boxKey = input.dataset.boxKey;
+
+            if (!boxKey) return; // Not a box input we care about
+
+            actionMessageEl.textContent = "";
+            if (!selectedTruckKey) {
+                actionMessageEl.textContent = "Please select a truck first!";
+                input.value = 0; // Reset input if no truck is selected
+                setTimeout(() => actionMessageEl.textContent = "", 3000);
+                return;
+            }
+
+            let value = parseInt(input.value, 10);
+
+            // Validate input: Not a number, negative, or more than inventory
+            if (isNaN(value) || value < 0) {
+                value = 0; // Default to 0 if invalid
+            }
+            if (value > INVENTORY_DATA[boxKey]) {
+                value = INVENTORY_DATA[boxKey];
+                actionMessageEl.textContent = `Max stock for ${BOX_TYPES_DATA[boxKey].name} is ${INVENTORY_DATA[boxKey]}.`;
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+            }
+
+            input.value = value; // Update the input field with validated value
+            selectedBoxCounts[boxKey] = value;
+            updateTruckStatusUI();
+        }
+
+        function handleResetSelections() {
+            resetSelectedBoxCounts();
+            updateAllBoxCountDisplays();
+            updateTruckStatusUI(); // Update status panel after resetting
+            actionMessageEl.textContent = "Selections have been reset.";
+            actionMessageEl.className = "text-xs text-center mt-3 h-4 text-green-500";
+            setTimeout(() => actionMessageEl.textContent = "", 3000);
+        }
+
+        function handleFindBestFit() {
+            if (!selectedTruckKey) {
+                 actionMessageEl.textContent = "Please select a truck first.";
+                 setTimeout(() => actionMessageEl.textContent = "", 3000);
+                return;
+            }
+             resetSelectedBoxCounts(); // Start fresh
+             const truckVolume = TRUCK_TYPES_DATA[selectedTruckKey].volume;
+             let remainingVolume = truckVolume;
+
+             const sortedBoxKeys = Object.keys(BOX_TYPES_DATA).sort((a,b) => BOX_TYPES_DATA[b].volume - BOX_TYPES_DATA[a].volume);
+
+             for(const key of sortedBoxKeys) {
+                 const box = BOX_TYPES_DATA[key];
+                 const inventory = INVENTORY_DATA[key];
+                 if(box.volume > 0) {
+                     let numToFit = Math.min(inventory, Math.floor(remainingVolume / box.volume));
+                     selectedBoxCounts[key] = numToFit;
+                     remainingVolume -= numToFit * box.volume;
+                 }
+             }
+             updateAllBoxCountDisplays();
+             updateTruckStatusUI();
+             actionMessageEl.textContent = "Volumetric fit calculated. Click 'View 3D Load' for packing.";
+             actionMessageEl.className = "text-xs text-center mt-3 h-4 text-indigo-600";
+             setTimeout(() => actionMessageEl.textContent = "", 4000);
+        }
+
+        // --- 3D Visualization Globals ---
+        let scene, camera, renderer, truckMesh, controls, animationFrameId, loadedBoxMeshes = [];
+
+        async function handleView3DLoad() {
+            actionMessageEl.textContent = "Calculating optimal placement...";
+            actionMessageEl.className = "text-xs text-center mt-3 h-4 text-indigo-600";
+
+            if (!selectedTruckKey) {
+                actionMessageEl.textContent = "Please select a truck first.";
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
+                return;
+            }
+
+            const truckData = TRUCK_TYPES_DATA[selectedTruckKey];
+            const boxesForAPI = {};
+            Object.keys(selectedBoxCounts).forEach(key => {
+                if (selectedBoxCounts[key] > 0) {
+                    boxesForAPI[key] = {
+                        ...BOX_TYPES_DATA[key],
+                        count: selectedBoxCounts[key]
+                    };
+                }
+            });
+
+            const payload = {
+                truck: truckData,
+                boxes: boxesForAPI
+            };
+
+            try {
+                const response = await fetch('http://127.0.0.1:5500/pack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const result = await response.json();
+
+                // --- Self-Correction and Feedback Logic ---
+                const placedCounts = {};
+                result.placements.forEach(p => {
+                    placedCounts[p.key] = (placedCounts[p.key] || 0) + 1;
+                });
+
+                // Update the master selection counts and the UI to reflect what was actually placed
+                selectedBoxCounts = placedCounts;
+                updateAllBoxCountDisplays();
+                updateTruckStatusUI(); // Recalculate volume based on what was actually placed
+
+                if (result.unplaced_count > 0) {
+                     actionMessageEl.textContent = `Packing complete. ${result.unplaced_count} boxes could not be placed and were removed from selection.`;
+                     actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                } else {
+                     actionMessageEl.textContent = `Success! All ${result.placements.length} selected boxes were placed.`;
+                     actionMessageEl.className = "text-xs text-center mt-3 h-4 text-green-500";
+                }
+
+                if (modal3D) modal3D.classList.remove('modal-hidden');
+
+                setTimeout(() => {
+                    initialize3DScene(truckData);
+                    renderBoxesInScene(result.placements);
+                    animate();
+                }, 100);
+
+            } catch (error) {
+                console.error('Error calling packing API:', error);
+                actionMessageEl.textContent = "Error connecting to backend. Is it running?";
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
+            }
+        }
+
+        function initialize3DScene(truckData) {
+            cleanup3DScene();
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xeeeeee);
+            const containerWidth = sceneContainer.clientWidth;
+            const containerHeight = sceneContainer.clientHeight;
+            if (containerWidth === 0 || containerHeight === 0) return;
+
+            camera = new THREE.PerspectiveCamera(75, containerWidth / containerHeight, 0.1, 10000);
+            camera.position.set(truckData.length * 0.75, truckData.height * 1.5, truckData.width * 1.5);
+            camera.lookAt(0, truckData.height / 2, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(containerWidth, containerHeight);
+            sceneContainer.innerHTML = '';
+            sceneContainer.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, truckData.height / 2, 0);
+            controls.enableDamping = true;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            directionalLight.position.set(truckData.length, truckData.height * 2, truckData.width * 1.5);
+            scene.add(directionalLight);
+
+            const truckGeometry = new THREE.BoxGeometry(truckData.length, truckData.height, truckData.width);
+            const truckEdges = new THREE.EdgesGeometry(truckGeometry);
+            const truckMaterial = new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 2 });
+            truckMesh = new THREE.LineSegments(truckEdges, truckMaterial);
+            truckMesh.position.set(0, truckData.height / 2, 0);
+            scene.add(truckMesh);
+
+            const gridHelper = new THREE.GridHelper(Math.max(truckData.length, truckData.width) * 1.5 , 20, 0x888888, 0xcccccc);
+            scene.add(gridHelper);
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            if (!camera || !renderer || !sceneContainer) return;
+            const containerWidth = sceneContainer.clientWidth;
+            const containerHeight = sceneContainer.clientHeight;
+            if (containerWidth === 0 || containerHeight === 0) return;
+
+            camera.aspect = containerWidth / containerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(containerWidth, containerHeight);
+        }
+
+        function renderBoxesInScene(placements) {
+            if (!scene) return;
+
+            placements.forEach(p => {
+                const boxGeo = new THREE.BoxGeometry(p.length, p.height, p.width);
+                const boxMat = new THREE.MeshStandardMaterial({
+                    color: BOX_TYPES_DATA[p.key]?.color || 0xaaaaaa,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                const boxMesh = new THREE.Mesh(boxGeo, boxMat);
+                boxMesh.position.set(p.x_center, p.y_center, p.z_center);
+                scene.add(boxMesh);
+                loadedBoxMeshes.push(boxMesh);
+
+                const edges = new THREE.EdgesGeometry(boxGeo);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0x222222, opacity: 0.5, transparent: true });
+                const lineSegments = new THREE.LineSegments(edges, lineMat);
+                lineSegments.position.copy(boxMesh.position);
+                scene.add(lineSegments);
+                loadedBoxMeshes.push(lineSegments);
+            });
+        }
+
+        function animate() {
+            if (!renderer || !scene || !camera) {
+                if(animationFrameId) cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+                return;
+            }
+            animationFrameId = requestAnimationFrame(animate);
+            if (controls) controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function cleanup3DScene() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            if (scene) {
+                loadedBoxMeshes.forEach(mesh => {
+                    if (mesh.geometry) mesh.geometry.dispose();
+                    if (mesh.material) {
+                        if(Array.isArray(mesh.material)) mesh.material.forEach(m=>m.dispose());
+                        else mesh.material.dispose();
+                    }
+                    scene.remove(mesh);
+                });
+                loadedBoxMeshes = [];
+
+                if (truckMesh) {
+                    if (truckMesh.geometry) truckMesh.geometry.dispose();
+                    if (truckMesh.material) truckMesh.material.dispose();
+                    scene.remove(truckMesh);
+                    truckMesh = null;
+                }
+                const gridHelper = scene.getObjectByProperty('type', 'GridHelper');
+                if(gridHelper) {
+                    scene.remove(gridHelper);
+                    if(gridHelper.geometry) gridHelper.geometry.dispose();
+                    if(gridHelper.material) gridHelper.material.dispose();
+                }
+                scene = null;
+            }
+            if (renderer) {
+                renderer.dispose();
+                if (renderer.domElement && renderer.domElement.parentElement) {
+                    renderer.domElement.parentElement.removeChild(renderer.domElement);
+                }
+                renderer = null;
+            }
+            if (controls) {
+                controls.dispose();
+                controls = null;
+            }
+            camera = null;
+            window.removeEventListener('resize', onWindowResize);
+            if(loading3DMessageEl) loading3DMessageEl.classList.add('hidden');
+        }
+
+        // --- Start the app ---
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</body>
+</html>
