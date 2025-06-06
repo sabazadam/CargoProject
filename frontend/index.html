@@ -73,37 +73,37 @@
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-            <!-- Left & Center Column: Trucks and Boxes -->
             <div class="lg:col-span-2 space-y-8">
-                <!-- Truck Selection -->
                 <div>
                     <h2 class="text-2xl font-semibold text-gray-700 mb-4 border-b pb-2">Select Truck</h2>
                     <div id="truckSelectionArea" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        <!-- Truck cards will be injected here -->
-                    </div>
+                        </div>
                 </div>
 
-                <!-- Box Configuration -->
                 <div>
                     <h2 class="text-2xl font-semibold text-gray-700 mb-4 border-b pb-2">Configure Box Quantities</h2>
                     <div id="boxConfigurationArea" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        <!-- Box cards will be injected here -->
-                    </div>
+                        </div>
                 </div>
             </div>
 
-            <!-- Right Column: Actions & Status -->
             <div class="space-y-6">
                 <div class="p-5 bg-gray-50 rounded-lg shadow sticky top-6">
                     <h2 class="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">Actions</h2>
-                    <button id="findBestFitBtn" class="w-full mb-3 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button id="findBestFitBtn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed mb-3">
                         <i class="fas fa-magic mr-2"></i>Volumetric Fit
+                    </button>
+                    <button id="view3DLoadBtn" class="w-full py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50 mb-3">
+                        <i class="fas fa-cube mr-2"></i>Calculate & View 3D Load
+                    </button>
+                    <button id="sendCargoBtn" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed mb-3">
+                        <i class="fas fa-truck-ramp-box mr-2"></i>Send Cargo
+                    </button>
+                    <button id="addBoxesBtn" class="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 mb-3">
+                        <i class="fas fa-box-add mr-2"></i>Add Boxes
                     </button>
                     <button id="resetSelectionsBtn" class="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50">
                         <i class="fas fa-undo mr-2"></i>Reset Selections
-                    </button>
-                    <button id="view3DLoadBtn" class="w-full mt-3 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-md shadow-md transition duration-150 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50">
-                        <i class="fas fa-cube mr-2"></i>Calculate & View 3D Load
                     </button>
                     <p id="actionMessage" class="text-xs text-center mt-3 h-4 text-red-500"></p>
 
@@ -127,7 +127,6 @@
         </div>
     </div>
 
-    <!-- 3D Modal -->
     <div id="modal3D" class="fixed inset-0 z-50 overflow-y-auto modal-hidden flex items-center justify-center p-4">
         <div class="fixed inset-0 bg-black modal-overlay"></div>
         <div class="modal-container bg-white w-11/12 md:max-w-2xl lg:max-w-4xl mx-auto rounded-lg shadow-xl z-50 overflow-y-auto">
@@ -149,22 +148,14 @@
 
     <script>
         // --- Data Structures ---
-        const BOX_TYPES_DATA = {
-            "small": { name: "Small Box", length: 10, width: 10, height: 10, volume: 1000, icon: "fa-box-archive", color: 0xff0000 },
-            "medium": { name: "Medium Box", length: 20, width: 20, height: 20, volume: 8000, icon: "fa-box-open", color: 0x00ff00 },
-            "large": { name: "Large Box", length: 30, width: 30, height: 30, volume: 27000, icon: "fa-boxes-stacked", color: 0x0000ff },
-            "flat": { name: "Flat Box", length: 40, width: 30, height: 5, volume: 6000, icon: "fa-box", color: 0xffff00 },
-            "long": { name: "Long Box", length: 50, width: 10, height: 10, volume: 5000, icon: "fa-box-tissue", color: 0xff00ff }
-        };
+        // BOX_TYPES_DATA and INVENTORY_DATA will now be fetched from the backend.
+        let BOX_TYPES_DATA = {}; // This will store box properties like dimensions and color
+        let INVENTORY_DATA = {}; // This will store the current stock of each box type
 
         const TRUCK_TYPES_DATA = {
             "pickup": { name: "Pickup Truck", length: 100, width: 50, height: 50, volume: 250000, icon: "fa-truck-pickup" },
             "van": { name: "Cargo Van", length: 200, width: 100, height: 100, volume: 2000000, icon: "fa-truck-moving" },
             "semi": { name: "Semi Trailer", length: 500, width: 150, height: 150, volume: 11250000, icon: "fa-truck" }
-        };
-
-        let INVENTORY_DATA = {
-            "small": 100, "medium": 50, "large": 20, "flat": 30, "long": 40
         };
 
         // --- State Variables ---
@@ -177,6 +168,9 @@
         const findBestFitBtn = document.getElementById('findBestFitBtn');
         const resetSelectionsBtn = document.getElementById('resetSelectionsBtn');
         const actionMessageEl = document.getElementById('actionMessage');
+        const sendCargoBtn = document.getElementById('sendCargoBtn');
+        const addBoxesBtn = document.getElementById('addBoxesBtn');
+
 
         const selectedTruckNameEl = document.getElementById('selectedTruckName');
         const truckTotalVolumeEl = document.getElementById('truckTotalVolume');
@@ -192,14 +186,17 @@
         const loading3DMessageEl = document.getElementById('loading3DMessage');
 
         // --- Initialization ---
-        function initializeApp() {
+        async function initializeApp() {
+            await fetchInventory(); // Fetch inventory and box types from backend first
             renderTrucks();
             renderBoxes();
-            resetSelectedBoxCounts();
+            resetSelectedBoxCounts(); // Reset selected counts after rendering with current inventory
             updateTruckStatusUI();
 
             findBestFitBtn.addEventListener('click', handleFindBestFit);
             resetSelectionsBtn.addEventListener('click', handleResetSelections);
+            sendCargoBtn.addEventListener('click', handleSendCargo);
+            addBoxesBtn.addEventListener('click', handleAddBoxes);
 
             if (view3DLoadBtn) {
                 view3DLoadBtn.addEventListener('click', handleView3DLoad);
@@ -211,6 +208,35 @@
                 });
             }
             updateActionButtonsState();
+        }
+
+        async function fetchInventory() {
+            try {
+                const response = await fetch('http://127.0.0.1:5500/inventory');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+
+                // Populate BOX_TYPES_DATA and INVENTORY_DATA
+                BOX_TYPES_DATA = {};
+                INVENTORY_DATA = {};
+                for (const key in data) {
+                    BOX_TYPES_DATA[key] = {
+                        name: data[key].name,
+                        length: data[key].length,
+                        width: data[key].width,
+                        height: data[key].height,
+                        volume: data[key].volume,
+                        icon: data[key].icon, // Assuming icon is part of initial data
+                        color: parseInt(data[key].color, 16) // Convert hex string back to int for Three.js
+                    };
+                    INVENTORY_DATA[key] = data[key].stock;
+                }
+                console.log("Inventory fetched:", INVENTORY_DATA);
+            } catch (error) {
+                console.error('Error fetching inventory:', error);
+                actionMessageEl.textContent = "Error fetching inventory from backend. Is it running?";
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
+            }
         }
 
         // --- Rendering Functions ---
@@ -233,6 +259,12 @@
 
         function renderBoxes() {
             boxConfigurationArea.innerHTML = '';
+            // Ensure BOX_TYPES_DATA is populated before rendering boxes
+            if (Object.keys(BOX_TYPES_DATA).length === 0) {
+                boxConfigurationArea.innerHTML = '<p class="text-center text-gray-500">Loading box data...</p>';
+                return;
+            }
+
             Object.keys(BOX_TYPES_DATA).forEach(key => {
                 const box = BOX_TYPES_DATA[key];
                 const card = document.createElement('div');
@@ -241,9 +273,15 @@
                     <i class="fas ${box.icon} fa-2x mb-2 text-green-500"></i>
                     <h4 class="font-semibold">${box.name}</h4>
                     <p class="text-xs text-gray-500">Vol: ${box.volume.toLocaleString()}</p>
-                    <p class="text-xs text-gray-500">Stock: <span id="stock-${key}">${INVENTORY_DATA[key]}</span></p>
+                    <p class="text-xs text-gray-500">Stock: <span id="stock-${key}">${INVENTORY_DATA[key] || 0}</span></p>
                     <div class="flex items-center justify-center mt-3">
+                        <button class="quantity-btn p-2 bg-gray-200 hover:bg-gray-300 rounded-l-md" data-box-key="${key}" data-change="-1">
+                            <i class="fas fa-minus"></i>
+                        </button>
                         <input type="number" id="count-${key}" value="${selectedBoxCounts[key] || 0}" min="0" data-box-key="${key}" class="quantity-input" />
+                        <button class="quantity-btn p-2 bg-gray-200 hover:bg-gray-300 rounded-r-md" data-box-key="${key}" data-change="1">
+                            <i class="fas fa-plus"></i>
+                        </button>
                     </div>
                 `;
                 boxConfigurationArea.appendChild(card);
@@ -251,6 +289,7 @@
 
             // Add a single event listener for all box inputs
             boxConfigurationArea.addEventListener('input', handleBoxQuantityChange);
+            boxConfigurationArea.addEventListener('click', handleQuantityButtonClick);
         }
 
         // --- UI Update Functions ---
@@ -262,7 +301,10 @@
 
                 let currentLoadedVolume = 0;
                 Object.keys(selectedBoxCounts).forEach(boxKey => {
-                    currentLoadedVolume += (selectedBoxCounts[boxKey] || 0) * BOX_TYPES_DATA[boxKey].volume;
+                    // Ensure box exists in BOX_TYPES_DATA before calculating volume
+                    if (BOX_TYPES_DATA[boxKey]) {
+                        currentLoadedVolume += (selectedBoxCounts[boxKey] || 0) * BOX_TYPES_DATA[boxKey].volume;
+                    }
                 });
 
                 const remainingVolume = truck.volume - currentLoadedVolume;
@@ -289,6 +331,11 @@
             if (countInput) {
                 countInput.value = selectedBoxCounts[boxKey] || 0;
             }
+            // Update stock display
+            const stockSpan = document.getElementById(`stock-${boxKey}`);
+            if (stockSpan) {
+                stockSpan.textContent = INVENTORY_DATA[boxKey] || 0;
+            }
         }
 
         function updateAllBoxCountDisplays() {
@@ -299,7 +346,10 @@
 
         function updateActionButtonsState() {
             findBestFitBtn.disabled = !selectedTruckKey;
-            if (view3DLoadBtn) view3DLoadBtn.disabled = !selectedTruckKey;
+            view3DLoadBtn.disabled = !selectedTruckKey;
+            // Enable Send Cargo only if a truck is selected AND at least one box is selected for loading
+            const hasBoxesSelected = Object.values(selectedBoxCounts).some(count => count > 0);
+            sendCargoBtn.disabled = !selectedTruckKey || !hasBoxesSelected;
         }
 
         // --- Event Handlers & Logic ---
@@ -322,7 +372,7 @@
             const input = event.target;
             const boxKey = input.dataset.boxKey;
 
-            if (!boxKey) return; // Not a box input we care about
+            if (!boxKey || !BOX_TYPES_DATA[boxKey]) return; // Not a box input we care about or box data not loaded
 
             actionMessageEl.textContent = "";
             if (!selectedTruckKey) {
@@ -338,10 +388,12 @@
             if (isNaN(value) || value < 0) {
                 value = 0; // Default to 0 if invalid
             }
+            // Limit selection to available stock
             if (value > INVENTORY_DATA[boxKey]) {
                 value = INVENTORY_DATA[boxKey];
-                actionMessageEl.textContent = `Max stock for ${BOX_TYPES_DATA[boxKey].name} is ${INVENTORY_DATA[boxKey]}.`;
+                actionMessageEl.textContent = `Only ${INVENTORY_DATA[boxKey]} of ${BOX_TYPES_DATA[boxKey].name} available.`;
                 actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                setTimeout(() => actionMessageEl.textContent = "", 3000);
             }
 
             input.value = value; // Update the input field with validated value
@@ -349,18 +401,50 @@
             updateTruckStatusUI();
         }
 
-        function handleResetSelections() {
+        function handleQuantityButtonClick(event) {
+            const button = event.target.closest('.quantity-btn');
+            if (!button) return;
+
+            const boxKey = button.dataset.boxKey;
+            const change = parseInt(button.dataset.change, 10);
+            const input = document.getElementById(`count-${boxKey}`);
+            if (!input) return;
+
+            let currentValue = parseInt(input.value, 10) || 0;
+            let newValue = currentValue + change;
+
+            // Apply validation similar to handleBoxQuantityChange
+            if (newValue < 0) {
+                newValue = 0;
+            }
+            if (newValue > INVENTORY_DATA[boxKey]) {
+                newValue = INVENTORY_DATA[boxKey];
+                actionMessageEl.textContent = `Only ${INVENTORY_DATA[boxKey]} of ${BOX_TYPES_DATA[boxKey].name} available.`;
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                setTimeout(() => actionMessageEl.textContent = "", 3000);
+            }
+
+            input.value = newValue;
+            selectedBoxCounts[boxKey] = newValue;
+            updateTruckStatusUI();
+            actionMessageEl.textContent = ""; // Clear any previous messages
+        }
+
+
+        async function handleResetSelections() {
             resetSelectedBoxCounts();
             updateAllBoxCountDisplays();
             updateTruckStatusUI(); // Update status panel after resetting
             actionMessageEl.textContent = "Selections have been reset.";
             actionMessageEl.className = "text-xs text-center mt-3 h-4 text-green-500";
             setTimeout(() => actionMessageEl.textContent = "", 3000);
+            cleanup3DScene(); // Clear 3D scene if reset
         }
 
-        function handleFindBestFit() {
+        async function handleFindBestFit() {
             if (!selectedTruckKey) {
                  actionMessageEl.textContent = "Please select a truck first.";
+                 actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
                  setTimeout(() => actionMessageEl.textContent = "", 3000);
                 return;
             }
@@ -368,12 +452,13 @@
              const truckVolume = TRUCK_TYPES_DATA[selectedTruckKey].volume;
              let remainingVolume = truckVolume;
 
+             // Sort boxes by volume descending, but only consider available stock
              const sortedBoxKeys = Object.keys(BOX_TYPES_DATA).sort((a,b) => BOX_TYPES_DATA[b].volume - BOX_TYPES_DATA[a].volume);
 
              for(const key of sortedBoxKeys) {
                  const box = BOX_TYPES_DATA[key];
-                 const inventory = INVENTORY_DATA[key];
-                 if(box.volume > 0) {
+                 const inventory = INVENTORY_DATA[key] || 0; // Use current inventory
+                 if(box.volume > 0 && inventory > 0) {
                      let numToFit = Math.min(inventory, Math.floor(remainingVolume / box.volume));
                      selectedBoxCounts[key] = numToFit;
                      remainingVolume -= numToFit * box.volume;
@@ -381,10 +466,177 @@
              }
              updateAllBoxCountDisplays();
              updateTruckStatusUI();
-             actionMessageEl.textContent = "Volumetric fit calculated. Click 'View 3D Load' for packing.";
+             actionMessageEl.textContent = "Volumetric fit calculated. Click 'Calculate & View 3D Load' for packing.";
              actionMessageEl.className = "text-xs text-center mt-3 h-4 text-indigo-600";
              setTimeout(() => actionMessageEl.textContent = "", 4000);
         }
+
+        async function updateInventoryBackend(boxKey, changeAmount, successMessage, errorMessage) {
+            try {
+                const response = await fetch('http://127.0.0.1:5500/inventory/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ box_key: boxKey, change_amount: changeAmount }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                actionMessageEl.textContent = successMessage;
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-green-500";
+                // Don't clear message immediately, allow individual updates to show, then clear later
+                // setTimeout(() => actionMessageEl.textContent = "", 3000);
+                return true;
+            } catch (error) {
+                console.error('Error updating inventory:', error);
+                actionMessageEl.textContent = errorMessage + (error.message ? ` ${error.message}` : '');
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
+                // Don't clear message immediately
+                return false;
+            }
+        }
+
+        async function handleSendCargo() {
+            actionMessageEl.textContent = "Sending cargo...";
+            actionMessageEl.className = "text-xs text-center mt-3 h-4 text-indigo-600";
+            if (!selectedTruckKey) {
+                 actionMessageEl.textContent = "Please select a truck first.";
+                 actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
+                 setTimeout(() => actionMessageEl.textContent = "", 3000);
+                return;
+            }
+
+            let allUpdatesSuccessful = true;
+            let totalBoxesSent = 0;
+            const boxesToDecrement = {}; // Store boxKey -> count for decrement
+
+            // Gather all selected boxes that have a count > 0
+            Object.keys(selectedBoxCounts).forEach(boxKey => {
+                const count = selectedBoxCounts[boxKey];
+                if (count > 0) {
+                    boxesToDecrement[boxKey] = count;
+                    totalBoxesSent += count;
+                }
+            });
+
+            if (totalBoxesSent === 0) {
+                actionMessageEl.textContent = "No boxes selected to send.";
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                setTimeout(() => actionMessageEl.textContent = "", 3000);
+                return;
+            }
+
+
+            for (const boxKey in boxesToDecrement) {
+                const count = boxesToDecrement[boxKey];
+                const success = await updateInventoryBackend(
+                    boxKey,
+                    -count, // Decrement stock
+                    `Decremented ${count} ${BOX_TYPES_DATA[boxKey].name}(s).`, // Individual message
+                    `Failed to decrement ${BOX_TYPES_DATA[boxKey].name}(s).` // Individual error message
+                );
+                if (!success) {
+                    allUpdatesSuccessful = false;
+                    break;
+                }
+            }
+
+            if (allUpdatesSuccessful) {
+                actionMessageEl.textContent = `All ${totalBoxesSent} selected boxes sent successfully!`;
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-green-500";
+                await fetchInventory(); // Refresh inventory after sending
+                resetSelectedBoxCounts(); // Clear selected counts on frontend
+                updateAllBoxCountDisplays(); // Update UI
+                updateTruckStatusUI(); // Update status panel
+                cleanup3DScene(); // Clear 3D scene after sending cargo
+            } else {
+                actionMessageEl.textContent = `Failed to send some cargo. Please check console for details.`;
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
+            }
+            setTimeout(() => actionMessageEl.textContent = "", 5000); // Clear final message
+        }
+
+        async function handleAddBoxes() {
+            actionMessageEl.textContent = "Awaiting box input...";
+            actionMessageEl.className = "text-xs text-center mt-3 h-4 text-indigo-600";
+
+            let promptMessage = "Enter quantities to add (e.g., 'small=5,medium=10').\nUse comma to separate multiple types:";
+            let quantitiesInput = prompt(promptMessage);
+
+            if (!quantitiesInput) {
+                actionMessageEl.textContent = "Box addition cancelled.";
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-gray-500";
+                setTimeout(() => actionMessageEl.textContent = "", 3000);
+                return;
+            }
+
+            const quantityPairs = quantitiesInput.split(',').map(s => s.trim()).filter(Boolean);
+            let anyUpdateAttempted = false;
+            let allAdditionsSuccessful = true;
+            let totalBoxesAdded = 0;
+            let processedUpdates = 0;
+
+            if (quantityPairs.length === 0) {
+                actionMessageEl.textContent = "No valid box quantities entered.";
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                setTimeout(() => actionMessageEl.textContent = "", 3000);
+                return;
+            }
+
+            for (const pair of quantityPairs) {
+                const parts = pair.split('=');
+                if (parts.length === 2) {
+                    const boxKey = parts[0].toLowerCase();
+                    const amount = parseInt(parts[1], 10);
+
+                    if (BOX_TYPES_DATA[boxKey] && !isNaN(amount) && amount > 0) {
+                        anyUpdateAttempted = true;
+                        const success = await updateInventoryBackend(
+                            boxKey,
+                            amount, // Increment stock
+                            `Added ${amount} ${BOX_TYPES_DATA[boxKey].name}(s).`,
+                            `Failed to add ${BOX_TYPES_DATA[boxKey].name}(s).`
+                        );
+                        if (!success) {
+                            allAdditionsSuccessful = false;
+                        } else {
+                            totalBoxesAdded += amount;
+                        }
+                    } else {
+                        console.warn(`Invalid input for pair: ${pair}. Box key: ${boxKey}, Amount: ${amount}.`);
+                        actionMessageEl.textContent = `Skipped invalid input: '${pair}'. Format 'boxType=amount' (e.g., small=5).`;
+                        actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                        // Don't set allAdditionsSuccessful = false here if it's just a malformed input,
+                        // as other valid inputs might succeed. We'll handle overall success later.
+                        setTimeout(() => actionMessageEl.textContent = "", 5000);
+                    }
+                } else {
+                    console.warn(`Malformed input pair: ${pair}.`);
+                    actionMessageEl.textContent = `Skipped malformed input: '${pair}'. Format 'boxType=amount'.`;
+                    actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                    setTimeout(() => actionMessageEl.textContent = "", 5000);
+                }
+            }
+
+            if (anyUpdateAttempted) {
+                await fetchInventory(); // Refresh inventory after adding
+                updateAllBoxCountDisplays();
+                updateTruckStatusUI();
+                if (allAdditionsSuccessful) { // Check this after individual calls
+                     actionMessageEl.textContent = `Successfully added ${totalBoxesAdded} boxes across types.`;
+                     actionMessageEl.className = "text-xs text-center mt-3 h-4 text-green-500";
+                } else {
+                     actionMessageEl.textContent = `Some boxes added, but some failed. Check messages above.`;
+                     actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                }
+            } else {
+                actionMessageEl.textContent = "No valid boxes were added.";
+                actionMessageEl.className = "text-xs text-center mt-3 h-4 text-gray-500";
+            }
+            setTimeout(() => actionMessageEl.textContent = "", 5000);
+        }
+
 
         // --- 3D Visualization Globals ---
         let scene, camera, renderer, truckMesh, controls, animationFrameId, loadedBoxMeshes = [];
@@ -396,19 +648,31 @@
             if (!selectedTruckKey) {
                 actionMessageEl.textContent = "Please select a truck first.";
                 actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
+                setTimeout(() => actionMessageEl.textContent = "", 3000);
                 return;
             }
 
             const truckData = TRUCK_TYPES_DATA[selectedTruckKey];
             const boxesForAPI = {};
+            let totalSelectedBoxes = 0;
             Object.keys(selectedBoxCounts).forEach(key => {
-                if (selectedBoxCounts[key] > 0) {
+                // Only send boxes that are selected AND are actually available in current INVENTORY_DATA
+                const countToPack = Math.min(selectedBoxCounts[key], INVENTORY_DATA[key] || 0);
+                if (countToPack > 0) {
                     boxesForAPI[key] = {
-                        ...BOX_TYPES_DATA[key],
-                        count: selectedBoxCounts[key]
+                        ...BOX_TYPES_DATA[key], // Use comprehensive data from BOX_TYPES_DATA
+                        count: countToPack // Send the actual count to pack (limited by inventory)
                     };
+                    totalSelectedBoxes += countToPack;
                 }
             });
+
+            if (totalSelectedBoxes === 0) {
+                 actionMessageEl.textContent = "No boxes selected or available in stock to pack.";
+                 actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
+                 setTimeout(() => actionMessageEl.textContent = "", 3000);
+                 return;
+            }
 
             const payload = {
                 truck: truckData,
@@ -426,19 +690,19 @@
 
                 const result = await response.json();
 
-                // --- Self-Correction and Feedback Logic ---
-                const placedCounts = {};
-                result.placements.forEach(p => {
-                    placedCounts[p.key] = (placedCounts[p.key] || 0) + 1;
-                });
+                // IMPORTANT: The /pack endpoint no longer decrements inventory.
+                // We only update selectedBoxCounts and UI to reflect what *could be placed*
+                // The actual stock change happens only when 'Send Cargo' is clicked.
 
-                // Update the master selection counts and the UI to reflect what was actually placed
-                selectedBoxCounts = placedCounts;
-                updateAllBoxCountDisplays();
+                selectedBoxCounts = {}; // Reset selected counts to reflect only what was placed
+                result.placements.forEach(p => {
+                    selectedBoxCounts[p.key] = (selectedBoxCounts[p.key] || 0) + 1;
+                });
+                updateAllBoxCountDisplays(); // This refreshes the input fields to show placed counts
                 updateTruckStatusUI(); // Recalculate volume based on what was actually placed
 
                 if (result.unplaced_count > 0) {
-                     actionMessageEl.textContent = `Packing complete. ${result.unplaced_count} boxes could not be placed and were removed from selection.`;
+                     actionMessageEl.textContent = `Packing complete. ${result.unplaced_count} boxes could not be placed. Selected quantities updated.`;
                      actionMessageEl.className = "text-xs text-center mt-3 h-4 text-orange-500";
                 } else {
                      actionMessageEl.textContent = `Success! All ${result.placements.length} selected boxes were placed.`;
@@ -457,6 +721,8 @@
                 console.error('Error calling packing API:', error);
                 actionMessageEl.textContent = "Error connecting to backend. Is it running?";
                 actionMessageEl.className = "text-xs text-center mt-3 h-4 text-red-500";
+            } finally {
+                 setTimeout(() => actionMessageEl.textContent = "", 5000);
             }
         }
 
@@ -515,7 +781,7 @@
             placements.forEach(p => {
                 const boxGeo = new THREE.BoxGeometry(p.length, p.height, p.width);
                 const boxMat = new THREE.MeshStandardMaterial({
-                    color: BOX_TYPES_DATA[p.key]?.color || 0xaaaaaa,
+                    color: BOX_TYPES_DATA[p.key]?.color || 0xaaaaaa, // Use color from fetched BOX_TYPES_DATA
                     transparent: true,
                     opacity: 0.9
                 });

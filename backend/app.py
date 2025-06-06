@@ -1,5 +1,7 @@
 # app.py - The Python Backend Server
 
+import sqlite3
+import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from py3dbp import Packer, Bin, Item
@@ -11,96 +13,215 @@ app = Flask(__name__)
 # This is crucial to allow our frontend (on a different address) to communicate with this backend.
 CORS(app)
 
+DATABASE = 'cargo_planner.db'
 
-# 3. Define the API Endpoint for packing
+# Initial data that would typically be loaded once into the database
+INITIAL_BOX_TYPES_DATA = {
+    "small": {"name": "Small Box", "length": 10, "width": 10, "height": 10, "volume": 1000, "icon": "fa-box-archive", "color": "0xff0000"},
+    "medium": {"name": "Medium Box", "length": 20, "width": 20, "height": 20, "volume": 8000, "icon": "fa-box-open", "color": "0x00ff00"},
+    "large": {"name": "Large Box", "length": 30, "width": 30, "height": 30, "volume": 27000, "icon": "fa-boxes-stacked", "color": "0x0000ff"},
+    "flat": {"name": "Flat Box", "length": 40, "width": 30, "height": 5, "volume": 6000, "icon": "fa-box", "color": "0xffff00"},
+    "long": {"name": "Long Box", "length": 50, "width": 10, "height": 10, "volume": 5000, "icon": "fa-box-tissue", "color": "0xff00ff"}
+}
+
+INITIAL_INVENTORY_DATA = {
+    "small": 100, "medium": 50, "large": 20, "flat": 30, "long": 40
+}
+
+def init_db():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS boxes (
+            key TEXT PRIMARY KEY,
+            name TEXT,
+            length REAL,
+            width REAL,
+            height REAL,
+            volume REAL,
+            color TEXT,
+            stock INTEGER
+        )
+    ''')
+
+    # Insert initial data if the table is empty
+    for box_key, box_data in INITIAL_BOX_TYPES_DATA.items():
+        # Check if the box already exists to prevent duplicate inserts on subsequent runs
+        cursor.execute("SELECT key FROM boxes WHERE key = ?", (box_key,))
+        if cursor.fetchone() is None:
+            cursor.execute(
+                "INSERT INTO boxes (key, name, length, width, height, volume, color, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    box_key,
+                    box_data['name'],
+                    box_data['length'],
+                    box_data['width'],
+                    box_data['height'],
+                    box_data['volume'],
+                    box_data['color'],
+                    INITIAL_INVENTORY_DATA.get(box_key, 0) # Get initial stock from INITIAL_INVENTORY_DATA
+                )
+            )
+    conn.commit()
+    conn.close()
+
+def get_box_data_from_db():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT key, name, length, width, height, volume, color, stock FROM boxes")
+    boxes = {}
+    for row in cursor.fetchall():
+        box_key, name, length, width, height, volume, color, stock = row
+        boxes[box_key] = {
+            "name": name,
+            "length": length,
+            "width": width,
+            "height": height,
+            "volume": volume,
+            "color": int(color, 16), # Convert hex string back to integer for Three.js
+            "stock": stock
+        }
+    conn.close()
+    return boxes
+
+def update_box_stock_in_db(box_key, change_amount):
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE boxes SET stock = stock + ? WHERE key = ?", (change_amount, box_key))
+    conn.commit()
+    conn.close()
+
+@app.before_request
+def before_request():
+    init_db()
+
+@app.route('/inventory', methods=['GET'])
+def get_inventory():
+    try:
+        boxes_data = get_box_data_from_db()
+        # Convert color from int to hex string for frontend consistency
+        inventory_response = {}
+        for key, data in boxes_data.items():
+            inventory_response[key] = {
+                **data,
+                "color": hex(data["color"]) # Convert back to hex for the frontend
+            }
+        return jsonify(inventory_response), 200
+    except Exception as e:
+        print(f"Error fetching inventory: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/inventory/update', methods=['POST'])
+def update_inventory():
+    data = request.get_json()
+    if not data or 'box_key' not in data or 'change_amount' not in data:
+        return jsonify({"error": "Invalid data format. 'box_key' and 'change_amount' are required."}), 400
+
+    box_key = data['box_key']
+    change_amount = data['change_amount']
+
+    try:
+        # Fetch current stock to ensure it doesn't go negative
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT stock FROM boxes WHERE key = ?", (box_key,))
+        current_stock = cursor.fetchone()
+        if current_stock is None:
+            conn.close()
+            return jsonify({"error": f"Box with key '{box_key}' not found."}), 404
+
+        new_stock = current_stock[0] + change_amount
+        if new_stock < 0:
+            conn.close()
+            return jsonify({"error": "Cannot decrement stock below zero."}), 400
+
+        update_box_stock_in_db(box_key, change_amount)
+        conn.close()
+        return jsonify({"message": "Inventory updated successfully."}), 200
+    except Exception as e:
+        print(f"Error updating inventory: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/pack', methods=['POST'])
 def pack_boxes():
-    """
-    Receives truck and box data, calculates the optimal 3D packing,
-    and returns the placements of the boxes.
-    """
-    # Get the JSON data sent from the frontend
     data = request.get_json()
 
     if not data or 'truck' not in data or 'boxes' not in data:
         return jsonify({"error": "Invalid data format. 'truck' and 'boxes' keys are required."}), 400
 
     truck_data = data['truck']
-    boxes_data = data['boxes']
+    boxes_data_requested = data['boxes'] # These are the boxes requested for packing
 
     try:
-        # --- Using py3dbp to calculate placements ---
-
-        # 1. Create the Packer
         packer = Packer()
-
-        # 2. Create the Bin (our truck)
-        # Note: We map our dimensions to py3dbp's (W, H, D)
         truck_bin = Bin(
             truck_data['name'],
-            truck_data['length'],  # Corresponds to 'width' (W) in py3dbp Bin constructor
-            truck_data['height'],  # Corresponds to 'height' (H)
-            truck_data['width'],  # Corresponds to 'depth' (D)
-            10000  # A large number for max_weight, as we are not constraining by weight
+            truck_data['length'],
+            truck_data['height'],
+            truck_data['width'],
+            10000
         )
         packer.add_bin(truck_bin)
 
-        # 3. Add the Items (our boxes) to be packed
-        for box_key, box in boxes_data.items():
-            if box.get('count', 0) > 0:
-                for i in range(box['count']):
-                    # Add each box instance as an item to be packed
-                    packer.add_item(Item(
-                        f"{box_key}_{i}",  # Name format: "small_0", "small_1", etc.
-                        box['length'],
-                        box['height'],
-                        box['width'],
-                        1  # A dummy weight for each box
-                    ))
+        # Fetch actual box data (including current stock) from the database
+        available_boxes_db = get_box_data_from_db()
 
-        # 4. Run the packing algorithm
+        for box_key, box_info_requested in boxes_data_requested.items():
+            if box_key in available_boxes_db:
+                # Use the stock from the database as the actual available count
+                # and take the minimum of requested count and available stock
+                actual_count = min(box_info_requested.get('count', 0), available_boxes_db[box_key]['stock'])
+                # Only add items if their actual count is greater than 0
+                if actual_count > 0:
+                    for i in range(actual_count):
+                        packer.add_item(Item(
+                            f"{box_key}_{i}",
+                            available_boxes_db[box_key]['length'],
+                            available_boxes_db[box_key]['height'],
+                            available_boxes_db[box_key]['width'],
+                            1
+                        ))
+            else:
+                print(f"Warning: Box type '{box_key}' not found in database.")
+
+
         print("Starting the packing algorithm...")
         packer.pack(
-            bigger_first=True,  # Pack larger items first for better results
+            bigger_first=True,
             distribute_items=False
         )
         print("Packing algorithm finished.")
 
-        # 5. Format the results to send back to the frontend
         placements = []
-        # We only have one bin (the truck)
         packed_bin = packer.bins[0]
+        # We no longer decrement stock here. Stock is decremented only on 'Send Cargo'.
+        # The frontend will be responsible for refreshing its view based on what was *placed*.
 
         for item in packed_bin.items:
             pos = item.position
             dim = item.get_dimension()
 
-            # ** FIX: Convert Decimal types from py3dbp to float for calculations **
             pos_x, pos_y, pos_z = float(pos[0]), float(pos[1]), float(pos[2])
             dim_w, dim_h, dim_d = float(dim[0]), float(dim[1]), float(dim[2])
 
-            # Center position calculation
             center_x = pos_x + dim_w / 2
             center_y = pos_y + dim_h / 2
             center_z = pos_z + dim_d / 2
 
-            # Adjust from py3dbp's corner-based origin to our Three.js center-based origin
             final_x = center_x - truck_data['length'] / 2
             final_y = center_y
             final_z = center_z - truck_data['width'] / 2
 
+            box_key = item.name.split('_')[0]
             placements.append({
                 'name': item.name,
-                # Dimensions for Three.js box geometry
                 'length': dim_w,
                 'height': dim_h,
                 'width': dim_d,
-                # Final center coordinates for the Three.js box mesh
                 'x_center': final_x,
                 'y_center': final_y,
                 'z_center': final_z,
-                # Extract original key (e.g., "small") to get the color in the frontend
-                'key': item.name.split('_')[0]
+                'key': box_key
             })
 
         unplaced_count = len(packer.unfit_items)
@@ -108,19 +229,19 @@ def pack_boxes():
 
         return jsonify({
             "placements": placements,
-            "unplaced_count": unplaced_count
+            "unplaced_count": unplaced_count,
+            # No 'updated_inventory' here, as inventory is not updated by /pack anymore
         }), 200
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        # It's useful to also log the traceback for debugging
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-
 # 4. Standard entry point to run the Flask app
 if __name__ == '__main__':
+    init_db() # Ensure DB is initialized when running the app directly
     # Runs the app on http://127.0.0.1:5500 (or your chosen port)
     # Make sure this port matches the one in your frontend's fetch call
     app.run(host='0.0.0.0', port=5500, debug=True)
