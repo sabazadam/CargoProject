@@ -68,7 +68,8 @@ def init_db():
 def get_box_data_from_db():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
-    cursor.execute("SELECT key, name, length, width, height, volume, color, stock FROM boxes")
+    # Sort by volume ascending to ensure consistent order on the frontend
+    cursor.execute("SELECT key, name, length, width, height, volume, color, stock FROM boxes ORDER BY volume ASC")
     boxes = {}
     for row in cursor.fetchall():
         box_key, name, length, width, height, volume, color, stock = row
@@ -84,12 +85,9 @@ def get_box_data_from_db():
     conn.close()
     return boxes
 
-def update_box_stock_in_db(box_key, change_amount):
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
+def update_box_stock_in_db(cursor, box_key, change_amount):
+    # Note: this function now requires a cursor to be passed to support transactions
     cursor.execute("UPDATE boxes SET stock = stock + ? WHERE key = ?", (change_amount, box_key))
-    conn.commit()
-    conn.close()
 
 @app.before_request
 def before_request():
@@ -99,48 +97,55 @@ def before_request():
 def get_inventory():
     try:
         boxes_data = get_box_data_from_db()
-        # Convert color from int to hex string for frontend consistency
         inventory_response = {}
         for key, data in boxes_data.items():
             inventory_response[key] = {
                 **data,
-                "color": hex(data["color"]) # Convert back to hex for the frontend
+                "color": hex(data["color"]),
+                # FIXED: Add the icon from the initial static data into the API response
+                "icon": INITIAL_BOX_TYPES_DATA.get(key, {}).get("icon", "fa-box")
             }
         return jsonify(inventory_response), 200
     except Exception as e:
         print(f"Error fetching inventory: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/inventory/update', methods=['POST'])
-def update_inventory():
+@app.route('/inventory/update_batch', methods=['POST'])
+def update_inventory_batch():
     data = request.get_json()
-    if not data or 'box_key' not in data or 'change_amount' not in data:
-        return jsonify({"error": "Invalid data format. 'box_key' and 'change_amount' are required."}), 400
+    if not data or 'updates' not in data or not isinstance(data['updates'], list):
+        return jsonify({"error": "Invalid data format. 'updates' array is required."}), 400
 
-    box_key = data['box_key']
-    change_amount = data['change_amount']
+    updates = data['updates']
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
 
     try:
-        # Fetch current stock to ensure it doesn't go negative
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        cursor.execute("SELECT stock FROM boxes WHERE key = ?", (box_key,))
-        current_stock = cursor.fetchone()
-        if current_stock is None:
-            conn.close()
-            return jsonify({"error": f"Box with key '{box_key}' not found."}), 404
+        for update in updates:
+            box_key = update.get('box_key')
+            change_amount = update.get('change_amount')
 
-        new_stock = current_stock[0] + change_amount
-        if new_stock < 0:
-            conn.close()
-            return jsonify({"error": "Cannot decrement stock below zero."}), 400
+            if not box_key or change_amount is None:
+                raise ValueError("Each update must include 'box_key' and 'change_amount'.")
 
-        update_box_stock_in_db(box_key, change_amount)
-        conn.close()
+            # Optional: Check if stock would go negative if change_amount is negative
+            if change_amount < 0:
+                 cursor.execute("SELECT stock FROM boxes WHERE key = ?", (box_key,))
+                 current_stock = cursor.fetchone()
+                 if current_stock and current_stock[0] + change_amount < 0:
+                     raise ValueError(f"Cannot decrement stock for '{box_key}' below zero.")
+
+            update_box_stock_in_db(cursor, box_key, change_amount)
+
+        conn.commit()
         return jsonify({"message": "Inventory updated successfully."}), 200
     except Exception as e:
-        print(f"Error updating inventory: {e}")
+        conn.rollback()
+        print(f"Error updating inventory batch: {e}")
         return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
 
 @app.route('/pack', methods=['POST'])
 def pack_boxes():
